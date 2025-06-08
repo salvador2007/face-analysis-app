@@ -1,0 +1,8 @@
+flask
+deepface
+opencv-python
+dlib
+matplotlib
+pandas
+scikit-learn
+watchdog
