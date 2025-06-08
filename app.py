@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 import uuid
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # 실제 배포시 환경변수로 설정
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['DATA_FILE'] = 'analysis_results.csv'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 제한
@@ -28,9 +28,8 @@ logger = logging.getLogger(__name__)
 # 허용된 파일 확장자
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
+# 디렉토리 생성
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs('templates', exist_ok=True)
-os.makedirs('static', exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -62,59 +61,6 @@ def upload():
         if not allowed_file(file.filename):
             flash('지원하지 않는 파일 형식입니다', 'error')
             return redirect(url_for('index'))
-
-        filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4().hex}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(filepath)
-
-        logger.info(f"파일 저장됨: {filepath}")
-
-        result = DeepFace.analyze(img_path=filepath, actions=['age', 'gender', 'emotion'], enforce_detection=False)[0]
-
-        age = result['age']
-        gender = result['gender']
-        emotion = result['dominant_emotion']
-
-        emotion_scores = result['emotion']
-        confidence = max(emotion_scores.values())
-
-        if isinstance(gender, dict):
-            gender_label = max(gender.items(), key=lambda x: x[1])[0]
-            gender_confidence = max(gender.values())
-        else:
-            gender_label = str(gender)
-            gender_confidence = 0
-
-        with open(app.config['DATA_FILE'], mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                datetime.now().isoformat(),
-                unique_filename,
-                age,
-                f"{gender_label}({gender_confidence:.1f}%)",
-                emotion,
-                f"{confidence:.1f}%",
-                '|'.join(selected_genres)
-            ])
-
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        return render_template('result.html',
-            age=age,
-            gender=gender_label,
-            gender_confidence=gender_confidence,
-            emotion=emotion,
-            confidence=confidence,
-            emotion_scores=emotion_scores,
-            selected_genres=selected_genres
-        )
-
-    except Exception as e:
-        logger.error(f"분석 오류: {str(e)}")
-        flash(f'분석 중 오류가 발생했습니다: {str(e)}', 'error')
-        return redirect(url_for('index'))
 
         # 안전한 파일명 생성
         filename = secure_filename(file.filename)
@@ -196,7 +142,7 @@ def graph():
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         fig.suptitle('📊 사용자 분석 대시보드', fontsize=16, fontweight='bold')
         
-        # 한글 폰트 설정 (선택사항)
+        # 한글 폰트 설정
         plt.rcParams['font.family'] = 'DejaVu Sans'
         
         # 1. 감정 분포
@@ -204,8 +150,8 @@ def graph():
             emotion_counts = df['emotion'].value_counts()
             colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3']
             emotion_counts.plot(kind='bar', ax=axes[0,0], color=colors[:len(emotion_counts)])
-            axes[0,0].set_title('감정 분포', fontsize=14, fontweight='bold')
-            axes[0,0].set_ylabel('사용자 수')
+            axes[0,0].set_title('Emotion Distribution', fontsize=14, fontweight='bold')
+            axes[0,0].set_ylabel('Count')
             axes[0,0].tick_params(axis='x', rotation=45)
             axes[0,0].grid(axis='y', alpha=0.3)
 
@@ -213,12 +159,12 @@ def graph():
         if 'age' in df.columns and not df['age'].empty:
             ages = pd.to_numeric(df['age'], errors='coerce').dropna()
             axes[0,1].hist(ages, bins=15, color='#74B9FF', alpha=0.8, edgecolor='black')
-            axes[0,1].set_title('나이 분포', fontsize=14, fontweight='bold')
-            axes[0,1].set_xlabel('나이')
-            axes[0,1].set_ylabel('사용자 수')
+            axes[0,1].set_title('Age Distribution', fontsize=14, fontweight='bold')
+            axes[0,1].set_xlabel('Age')
+            axes[0,1].set_ylabel('Count')
             axes[0,1].grid(axis='y', alpha=0.3)
             axes[0,1].axvline(ages.mean(), color='red', linestyle='--', 
-                            label=f'평균: {ages.mean():.1f}세')
+                            label=f'Average: {ages.mean():.1f}')
             axes[0,1].legend()
 
         # 3. 장르 선호도
@@ -236,16 +182,14 @@ def graph():
                                                         autopct='%1.1f%%',
                                                         colors=colors[:len(genre_counts)],
                                                         startangle=90)
-                axes[1,0].set_title('선호 장르 분포', fontsize=14, fontweight='bold')
+                axes[1,0].set_title('Genre Preferences', fontsize=14, fontweight='bold')
                 
-                # 텍스트 스타일링
                 for autotext in autotexts:
                     autotext.set_color('white')
                     autotext.set_fontweight('bold')
 
         # 4. 성별 및 감정 교차분석
         if 'gender' in df.columns and 'emotion' in df.columns:
-            # 성별 데이터 정리
             gender_clean = []
             for gender in df['gender']:
                 if isinstance(gender, str):
@@ -267,10 +211,10 @@ def graph():
             if not crosstab.empty:
                 crosstab.plot(kind='bar', ax=axes[1,1], stacked=True, 
                             colormap='Set3', alpha=0.8)
-                axes[1,1].set_title('성별별 감정 분포', fontsize=14, fontweight='bold')
-                axes[1,1].set_ylabel('사용자 수')
+                axes[1,1].set_title('Gender-Emotion Distribution', fontsize=14, fontweight='bold')
+                axes[1,1].set_ylabel('Count')
                 axes[1,1].tick_params(axis='x', rotation=0)
-                axes[1,1].legend(title='감정', bbox_to_anchor=(1.05, 1), loc='upper left')
+                axes[1,1].legend(title='Emotion', bbox_to_anchor=(1.05, 1), loc='upper left')
                 axes[1,1].grid(axis='y', alpha=0.3)
 
         plt.tight_layout()
@@ -391,9 +335,7 @@ def admin():
             'total_users': len(df),
             'avg_age': f"{df['age'].mean():.1f}세" if 'age' in df.columns else 'N/A',
             'age_range': f"{df['age'].min():.0f}~{df['age'].max():.0f}세" if 'age' in df.columns else 'N/A',
-            'most_emotion': df['emotion'].mode().iloc[0] if 'emotion' in df.columns and not df['emotion'].empty else 'N/A',
-            'date_range': f"{df['timestamp'].min()[:10]} ~ {df['timestamp'].max()[:10]}" if 'timestamp' in df.columns else 'N/A',
-            'emotions_count': len(df['emotion'].unique()) if 'emotion' in df.columns else 0
+            'most_emotion': df['emotion'].mode().iloc[0] if 'emotion' in df.columns and not df['emotion'].empty else 'N/A'
         }
 
         return render_template('admin.html', 
@@ -428,6 +370,11 @@ def api_stats():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
 @app.errorhandler(413)
 def too_large(e):
