@@ -361,3 +361,39 @@
                     </div>
                     <div class="genre-item">
                         <input type="checkbox" name="genre" value="액션" id="action" class="genre-checkbox">
+                        <label for="action" class="genre-label">💥 액션</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" name="genre" value="로맨스" id="romance" class="genre-checkbox">
+                        <label for="romance" class="genre-label">💕 로맨스</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" name="genre" value="스릴러" id="thriller" class="genre-checkbox">
+                        <label for="thriller" class="genre-label">😰 스릴러</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" name="genre" value="SF" id="sf" class="genre-checkbox">
+                        <label for="sf" class="genre-label">🚀 SF</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" name="genre" value="판타지" id="fantasy" class="genre-checkbox">
+                        <label for="fantasy" class="genre-label">🧙 판타지</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn">
+                <i class="fas fa-magic"></i> 분석 시작하기
+            </button>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>분석 중입니다... 잠시만 기다려주세요</p>
+            </div>
+        </form>
+
+        <div class="nav-links">
+            <a href="/graph" class="nav-link">
+                <i class="fas fa-chart-bar"></i> 통계 보기
+            </a>
+            <a href
