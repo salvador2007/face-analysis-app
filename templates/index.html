@@ -153,6 +153,17 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
 
+        .file-info {
+            background: #e8f5e8;
+            border: 1px solid #c8e6c9;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #2e7d32;
+            display: none;
+        }
+
         .genre-section {
             margin-bottom: 30px;
             text-align: left;
@@ -217,6 +228,7 @@
             transition: all 0.3s ease;
             width: 100%;
             margin-bottom: 20px;
+            position: relative;
         }
 
         .submit-btn:hover:not(:disabled) {
@@ -227,6 +239,10 @@
         .submit-btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+        }
+
+        .submit-btn.loading {
+            background: #6c757d;
         }
 
         .nav-links {
@@ -280,107 +296,25 @@
             border: 1px solid #c8e6c9;
         }
 
-        .loading {
+        .flash-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #bbdefb;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
             display: none;
-            text-align: center;
-            margin-top: 20px;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            .header h1 {
-                font-size: 1.8em;
-            }
-            
-            .genre-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .nav-links {
-                flex-direction: column;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎭 AI 얼굴 분석</h1>
-            <p>당신의 표정을 분석하고<br>맞춤 장르를 추천해드려요!</p>
-        </div>
-
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="flash-message flash-{{ category }}">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-
-        <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
-            <div class="upload-section">
-                <div class="file-input-wrapper">
-                    <input type="file" name="photo" id="photo" class="file-input" accept="image/*" required>
-                    <label for="photo" class="file-input-label" id="fileLabel">
-                        <i class="fas fa-camera" id="uploadIcon"></i>
-                        <span id="uploadText">사진을 선택하세요</span>
-                        <div class="upload-success" id="uploadSuccess">
-                            <i class="fas fa-check"></i>
-                        </div>
-                    </label>
-                    <div class="preview-container" id="previewContainer">
-                        <img id="preview" class="preview-image" alt="미리보기">
-                    </div>
-                </div>
-            </div>
-
-            <div class="genre-section">
-                <h3>🎬 좋아하는 장르를 선택하세요</h3>
-                <div class="genre-grid">
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="코미디" id="comedy" class="genre-checkbox">
-                        <label for="comedy" class="genre-label">😄 코미디</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="공포" id="horror" class="genre-checkbox">
-                        <label for="horror" class="genre-label">👻 공포</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="드라마" id="drama" class="genre-checkbox">
-                        <label for="drama" class="genre-label">🎭 드라마</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="액션" id="action" class="genre-checkbox">
-                        <label for="action" class="genre-label">💥 액션</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="로맨스" id="romance" class="genre-checkbox">
-                        <label for="romance" class="genre-label">💕 로맨스</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="스릴러" id="thriller" class="genre-checkbox">
-                        <label for="thriller" class="genre-label">😰
+        .loading-content {
+            background: white;
+            padding
