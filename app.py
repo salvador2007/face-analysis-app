@@ -1,164 +1,444 @@
-from flask import Flask, request
+from flask import Flask, request, render_template, jsonify, flash, redirect, url_for
 import cv2
 import os
 import csv
 from datetime import datetime
 from deepface import DeepFace
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.neighbors import KNeighborsClassifier
-import dlib
 import numpy as np
 from io import BytesIO
 import base64
+import logging
+from werkzeug.utils import secure_filename
+import uuid
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # 실제 배포시 환경변수로 설정
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['DATA_FILE'] = 'analysis_results.csv'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 제한
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 허용된 파일 확장자
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('templates', exist_ok=True)
+os.makedirs('static', exist_ok=True)
 
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# CSV 파일 초기화
 if not os.path.exists(app.config['DATA_FILE']):
     with open(app.config['DATA_FILE'], mode='w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['timestamp', 'filename', 'age', 'gender', 'emotion', 'face_shape', 'eye_distance', 'jaw_ratio', 'eye_size', 'nose_size', 'mouth_size', 'eye_angle', 'genres'])
-
-def get_facial_features(image_path):
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-
-    img = cv2.imread(image_path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray)
-
-    if len(faces) == 0:
-        return (None,) * 8
-
-    shape = predictor(gray, faces[0])
-    coords = np.array([[p.x, p.y] for p in shape.parts()])
-
-    eye_distance = np.linalg.norm(coords[36] - coords[45])
-    jaw_width = np.linalg.norm(coords[3] - coords[13])
-    face_height = np.linalg.norm(coords[8] - coords[27])
-    jaw_ratio = jaw_width / face_height if face_height else 0
-
-    left_eye = coords[36:42]
-    right_eye = coords[42:48]
-    eye_size = (np.mean(np.linalg.norm(left_eye - np.roll(left_eye, -1, axis=0), axis=1)) +
-                 np.mean(np.linalg.norm(right_eye - np.roll(right_eye, -1, axis=0), axis=1))) / 2
-
-    nose_width = np.linalg.norm(coords[31] - coords[35])
-    nose_height = np.linalg.norm(coords[27] - coords[33])
-    nose_size = (nose_width + nose_height) / 2
-
-    mouth_width = np.linalg.norm(coords[48] - coords[54])
-    mouth_height = np.linalg.norm(coords[51] - coords[57])
-    mouth_size = (mouth_width + mouth_height) / 2
-
-    eye_angle = np.degrees(np.arctan2(coords[45][1] - coords[36][1], coords[45][0] - coords[36][0]))
-
-    if jaw_ratio < 1.2:
-        face_shape = "계란형"
-    elif jaw_ratio < 1.5:
-        face_shape = "둥근형"
-    else:
-        face_shape = "각진형"
-
-    return face_shape, round(eye_distance, 2), round(jaw_ratio, 2), round(eye_size, 2), round(nose_size, 2), round(mouth_size, 2), round(eye_angle, 2)
+        writer.writerow(['timestamp', 'filename', 'age', 'gender', 'emotion', 'confidence', 'genres'])
 
 @app.route('/')
 def index():
-    return '''
-        <h2>DeepFace 얼굴 분석기 + 장르 설문</h2>
-        <form method="post" action="/upload" enctype="multipart/form-data">
-            <label>사진 업로드:</label><br>
-            <input type="file" name="photo"><br><br>
-
-            <label>좋아하는 장르를 선택하세요:</label><br>
-            <input type="checkbox" name="genre" value="코미디"> 코미디<br>
-            <input type="checkbox" name="genre" value="공포"> 공포<br>
-            <input type="checkbox" name="genre" value="드라마"> 드라마<br>
-            <input type="checkbox" name="genre" value="액션"> 액션<br>
-            <input type="checkbox" name="genre" value="다큐멘터리"> 다큐멘터리<br><br>
-
-            <input type="submit" value="제출">
-        </form>
-        <br><a href="/graph">📊 시각화된 결과 보기</a>
-        <br><a href="/recommend">🤖 AI 추천 보기</a>
-        <br><a href="/admin">📈 관리자용 분석 페이지</a>
-    '''
+    return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    photo = request.files['photo']
-    selected_genres = request.form.getlist('genre')
-
-    if photo:
-        filename = photo.filename
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        photo.save(filepath)
-
-        try:
-            result = DeepFace.analyze(img_path=filepath, actions=['age', 'gender', 'emotion'], enforce_detection=False)[0]
-            age = result['age']
-            gender = result['gender']
-            emotion = result['dominant_emotion']
-
-            face_shape, eye_distance, jaw_ratio, eye_size, nose_size, mouth_size, eye_angle = get_facial_features(filepath)
-
-            with open(app.config['DATA_FILE'], mode='a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    datetime.now().isoformat(), filename, age, gender, emotion,
-                    face_shape, eye_distance, jaw_ratio, eye_size, nose_size, mouth_size, eye_angle,
-                    '|'.join(selected_genres)
-                ])
-
-            return f"""
-                <h3>분석 결과:</h3>
-                <ul>
-                    <li>나이 추정: {age}</li>
-                    <li>성별: {gender}</li>
-                    <li>감정: {emotion}</li>
-                    <li>얼굴형: {face_shape}</li>
-                    <li>눈 사이 거리: {eye_distance}</li>
-                    <li>턱 비율: {jaw_ratio}</li>
-                    <li>눈 크기: {eye_size}</li>
-                    <li>코 크기: {nose_size}</li>
-                    <li>입 크기: {mouth_size}</li>
-                    <li>눈꼬리 각도: {eye_angle}°</li>
-                </ul>
-                <a href='/'>다시하기</a> | <a href='/graph'>📊 시각화 보기</a> | <a href='/recommend'>🤖 AI 추천 보기</a> | <a href='/admin'>📈 관리자 분석 보기</a>
-            """
-        except Exception as e:
-            return f"<h3>분석 오류: {str(e)}</h3><a href='/'>돌아가기</a>"
-
-    return "<h3>사진 업로드 실패</h3>"
-
-@app.route('/admin')
-def admin():
     try:
-        df = pd.read_csv(app.config['DATA_FILE'])
-        fig, ax = plt.subplots(figsize=(10, 5))
-        df['face_shape'].value_counts().plot(kind='bar', ax=ax)
-        ax.set_title("얼굴형 분포")
-        ax.set_ylabel("명 수")
+        if 'photo' not in request.files:
+            flash('사진을 선택해주세요', 'error')
+            return redirect(url_for('index'))
 
+        file = request.files['photo']
+        selected_genres = request.form.getlist('genre')
+
+        if file.filename == '':
+            flash('파일이 선택되지 않았습니다', 'error')
+            return redirect(url_for('index'))
+
+        if not allowed_file(file.filename):
+            flash('지원하지 않는 파일 형식입니다', 'error')
+            return redirect(url_for('index'))
+
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(filepath)
+
+        logger.info(f"파일 저장됨: {filepath}")
+
+        result = DeepFace.analyze(img_path=filepath, actions=['age', 'gender', 'emotion'], enforce_detection=False)[0]
+
+        age = result['age']
+        gender = result['gender']
+        emotion = result['dominant_emotion']
+
+        emotion_scores = result['emotion']
+        confidence = max(emotion_scores.values())
+
+        if isinstance(gender, dict):
+            gender_label = max(gender.items(), key=lambda x: x[1])[0]
+            gender_confidence = max(gender.values())
+        else:
+            gender_label = str(gender)
+            gender_confidence = 0
+
+        with open(app.config['DATA_FILE'], mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().isoformat(),
+                unique_filename,
+                age,
+                f"{gender_label}({gender_confidence:.1f}%)",
+                emotion,
+                f"{confidence:.1f}%",
+                '|'.join(selected_genres)
+            ])
+
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        return render_template('result.html',
+            age=age,
+            gender=gender_label,
+            gender_confidence=gender_confidence,
+            emotion=emotion,
+            confidence=confidence,
+            emotion_scores=emotion_scores,
+            selected_genres=selected_genres
+        )
+
+    except Exception as e:
+        logger.error(f"분석 오류: {str(e)}")
+        flash(f'분석 중 오류가 발생했습니다: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+        # 안전한 파일명 생성
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(filepath)
+
+        logger.info(f"파일 저장됨: {filepath}")
+
+        # DeepFace 분석
+        result = DeepFace.analyze(
+            img_path=filepath, 
+            actions=['age', 'gender', 'emotion'], 
+            enforce_detection=False
+        )[0]
+        
+        age = result['age']
+        gender = result['gender']
+        emotion = result['dominant_emotion']
+        
+        # 신뢰도 계산
+        emotion_scores = result['emotion']
+        confidence = max(emotion_scores.values())
+        
+        # 성별 처리
+        if isinstance(gender, dict):
+            gender_label = max(gender.items(), key=lambda x: x[1])[0]
+            gender_confidence = max(gender.values())
+        else:
+            gender_label = str(gender)
+            gender_confidence = 0
+
+        # CSV에 저장
+        with open(app.config['DATA_FILE'], mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().isoformat(), 
+                unique_filename, 
+                age, 
+                f"{gender_label}({gender_confidence:.1f}%)",
+                emotion,
+                f"{confidence:.1f}%",
+                '|'.join(selected_genres)
+            ])
+
+        # 파일 정리
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        return render_template('result.html', 
+                             age=age,
+                             gender=gender_label,
+                             gender_confidence=gender_confidence,
+                             emotion=emotion,
+                             confidence=confidence,
+                             emotion_scores=emotion_scores,
+                             selected_genres=selected_genres)
+        
+    except Exception as e:
+        logger.error(f"분석 오류: {str(e)}")
+        flash(f'분석 중 오류가 발생했습니다: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/graph')
+def graph():
+    try:
+        if not os.path.exists(app.config['DATA_FILE']):
+            flash('분석된 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+            
+        df = pd.read_csv(app.config['DATA_FILE'])
+        
+        if df.empty:
+            flash('분석된 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+
+        # 그래프 생성
+        plt.style.use('default')
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle('📊 사용자 분석 대시보드', fontsize=16, fontweight='bold')
+        
+        # 한글 폰트 설정 (선택사항)
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+        
+        # 1. 감정 분포
+        if 'emotion' in df.columns and not df['emotion'].empty:
+            emotion_counts = df['emotion'].value_counts()
+            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3']
+            emotion_counts.plot(kind='bar', ax=axes[0,0], color=colors[:len(emotion_counts)])
+            axes[0,0].set_title('감정 분포', fontsize=14, fontweight='bold')
+            axes[0,0].set_ylabel('사용자 수')
+            axes[0,0].tick_params(axis='x', rotation=45)
+            axes[0,0].grid(axis='y', alpha=0.3)
+
+        # 2. 나이 분포
+        if 'age' in df.columns and not df['age'].empty:
+            ages = pd.to_numeric(df['age'], errors='coerce').dropna()
+            axes[0,1].hist(ages, bins=15, color='#74B9FF', alpha=0.8, edgecolor='black')
+            axes[0,1].set_title('나이 분포', fontsize=14, fontweight='bold')
+            axes[0,1].set_xlabel('나이')
+            axes[0,1].set_ylabel('사용자 수')
+            axes[0,1].grid(axis='y', alpha=0.3)
+            axes[0,1].axvline(ages.mean(), color='red', linestyle='--', 
+                            label=f'평균: {ages.mean():.1f}세')
+            axes[0,1].legend()
+
+        # 3. 장르 선호도
+        if 'genres' in df.columns:
+            all_genres = []
+            for genres in df['genres'].dropna():
+                if genres and genres != 'nan':
+                    all_genres.extend(genres.split('|'))
+            
+            if all_genres:
+                genre_counts = pd.Series(all_genres).value_counts()
+                colors = ['#FD79A8', '#FDCB6E', '#6C5CE7', '#A29BFE', '#00B894']
+                wedges, texts, autotexts = axes[1,0].pie(genre_counts.values, 
+                                                        labels=genre_counts.index,
+                                                        autopct='%1.1f%%',
+                                                        colors=colors[:len(genre_counts)],
+                                                        startangle=90)
+                axes[1,0].set_title('선호 장르 분포', fontsize=14, fontweight='bold')
+                
+                # 텍스트 스타일링
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontweight('bold')
+
+        # 4. 성별 및 감정 교차분석
+        if 'gender' in df.columns and 'emotion' in df.columns:
+            # 성별 데이터 정리
+            gender_clean = []
+            for gender in df['gender']:
+                if isinstance(gender, str):
+                    if 'Woman' in gender:
+                        gender_clean.append('Female')
+                    elif 'Man' in gender:
+                        gender_clean.append('Male')
+                    else:
+                        gender_clean.append('Unknown')
+                else:
+                    gender_clean.append('Unknown')
+            
+            df_temp = pd.DataFrame({
+                'gender': gender_clean,
+                'emotion': df['emotion']
+            })
+            
+            crosstab = pd.crosstab(df_temp['gender'], df_temp['emotion'])
+            if not crosstab.empty:
+                crosstab.plot(kind='bar', ax=axes[1,1], stacked=True, 
+                            colormap='Set3', alpha=0.8)
+                axes[1,1].set_title('성별별 감정 분포', fontsize=14, fontweight='bold')
+                axes[1,1].set_ylabel('사용자 수')
+                axes[1,1].tick_params(axis='x', rotation=0)
+                axes[1,1].legend(title='감정', bbox_to_anchor=(1.05, 1), loc='upper left')
+                axes[1,1].grid(axis='y', alpha=0.3)
+
+        plt.tight_layout()
+        
+        # 이미지로 변환
         buf = BytesIO()
-        plt.savefig(buf, format="png")
+        plt.savefig(buf, format="png", dpi=150, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
         buf.seek(0)
         img_base64 = base64.b64encode(buf.getvalue()).decode()
         buf.close()
         plt.close(fig)
 
-        return f'<h3>관리자용 얼굴형 분석 결과</h3><img src="data:image/png;base64,{img_base64}"><br><a href="/">돌아가기</a>'
-    except Exception as e:
-        return f"<h3>분석 실패: {str(e)}</h3><a href='/'>돌아가기</a>"
+        # 통계 정보 계산
+        stats = {
+            'total_users': len(df),
+            'avg_age': df['age'].mean() if 'age' in df.columns else 0,
+            'most_common_emotion': df['emotion'].mode().iloc[0] if 'emotion' in df.columns and not df['emotion'].empty else 'N/A',
+            'date_range': f"{df['timestamp'].min()[:10]} ~ {df['timestamp'].max()[:10]}" if 'timestamp' in df.columns else 'N/A'
+        }
 
-import os
+        return render_template('graph.html', 
+                             graph_data=img_base64,
+                             stats=stats)
+        
+    except Exception as e:
+        logger.error(f"그래프 생성 오류: {str(e)}")
+        flash(f'그래프 생성 중 오류가 발생했습니다: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/recommend')
+def recommend():
+    try:
+        if not os.path.exists(app.config['DATA_FILE']):
+            flash('추천을 위한 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+            
+        df = pd.read_csv(app.config['DATA_FILE'])
+        
+        if df.empty:
+            flash('추천을 위한 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+
+        recommendations = []
+        insights = []
+        
+        # 감정별 장르 선호도 분석
+        emotion_genre_map = {}
+        for _, row in df.iterrows():
+            emotion = row['emotion']
+            genres = str(row['genres']).split('|') if pd.notna(row['genres']) else []
+            
+            if emotion not in emotion_genre_map:
+                emotion_genre_map[emotion] = {}
+            
+            for genre in genres:
+                if genre and genre.strip():
+                    emotion_genre_map[emotion][genre] = emotion_genre_map[emotion].get(genre, 0) + 1
+
+        # 추천 생성
+        for emotion, genres in emotion_genre_map.items():
+            if genres:
+                sorted_genres = sorted(genres.items(), key=lambda x: x[1], reverse=True)
+                top_genre = sorted_genres[0]
+                recommendations.append({
+                    'emotion': emotion,
+                    'genre': top_genre[0],
+                    'count': top_genre[1],
+                    'percentage': (top_genre[1] / sum(genres.values())) * 100
+                })
+
+        # 인사이트 생성
+        if len(df) > 0:
+            avg_age = df['age'].mean() if 'age' in df.columns else 0
+            most_emotion = df['emotion'].mode().iloc[0] if 'emotion' in df.columns and not df['emotion'].empty else 'unknown'
+            
+            insights.append(f"평균 연령대는 {avg_age:.1f}세입니다")
+            insights.append(f"가장 많이 감지된 감정은 '{most_emotion}'입니다")
+            
+            # 장르 분석
+            all_genres = []
+            for genres in df['genres'].dropna():
+                if genres and genres != 'nan':
+                    all_genres.extend(genres.split('|'))
+            
+            if all_genres:
+                top_genre = pd.Series(all_genres).mode().iloc[0]
+                insights.append(f"가장 인기 있는 장르는 '{top_genre}'입니다")
+
+        return render_template('recommend.html', 
+                             recommendations=recommendations,
+                             insights=insights,
+                             total_users=len(df))
+        
+    except Exception as e:
+        logger.error(f"추천 생성 오류: {str(e)}")
+        flash(f'추천 생성 중 오류가 발생했습니다: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/admin')
+def admin():
+    try:
+        if not os.path.exists(app.config['DATA_FILE']):
+            flash('관리할 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+            
+        df = pd.read_csv(app.config['DATA_FILE'])
+        
+        if df.empty:
+            flash('관리할 데이터가 없습니다', 'warning')
+            return redirect(url_for('index'))
+
+        # 최근 데이터 (최대 10개)
+        recent_data = df.tail(10).to_dict('records')
+        
+        # 전체 통계
+        stats = {
+            'total_users': len(df),
+            'avg_age': f"{df['age'].mean():.1f}세" if 'age' in df.columns else 'N/A',
+            'age_range': f"{df['age'].min():.0f}~{df['age'].max():.0f}세" if 'age' in df.columns else 'N/A',
+            'most_emotion': df['emotion'].mode().iloc[0] if 'emotion' in df.columns and not df['emotion'].empty else 'N/A',
+            'date_range': f"{df['timestamp'].min()[:10]} ~ {df['timestamp'].max()[:10]}" if 'timestamp' in df.columns else 'N/A',
+            'emotions_count': len(df['emotion'].unique()) if 'emotion' in df.columns else 0
+        }
+
+        return render_template('admin.html', 
+                             recent_data=recent_data,
+                             stats=stats)
+        
+    except Exception as e:
+        logger.error(f"관리자 페이지 오류: {str(e)}")
+        flash(f'관리자 페이지 로드 중 오류가 발생했습니다: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/api/stats')
+def api_stats():
+    """API 엔드포인트 - 통계 데이터 JSON으로 반환"""
+    try:
+        if not os.path.exists(app.config['DATA_FILE']):
+            return jsonify({'error': 'No data available'}), 404
+            
+        df = pd.read_csv(app.config['DATA_FILE'])
+        
+        if df.empty:
+            return jsonify({'error': 'No data available'}), 404
+
+        stats = {
+            'total_users': len(df),
+            'avg_age': float(df['age'].mean()) if 'age' in df.columns else 0,
+            'emotions': df['emotion'].value_counts().to_dict() if 'emotion' in df.columns else {},
+            'last_updated': datetime.now().isoformat()
+        }
+
+        return jsonify(stats)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.errorhandler(413)
+def too_large(e):
+    flash('파일이 너무 큽니다 (최대 16MB)', 'error')
+    return redirect(url_for('index'))
+
+@app.errorhandler(500)
+def internal_error(e):
+    flash('서버 내부 오류가 발생했습니다', 'error')
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Render에서 사용하는 환경변수
-    app.run(debug=True, host='0.0.0.0', port=port)
-
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
