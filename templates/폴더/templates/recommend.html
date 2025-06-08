@@ -1,0 +1,122 @@
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 장르 추천</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #333;
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        .recommendation-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+        }
+        .recommendation-card h3 {
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+        .insights-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        .insights-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .insight-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .insight-item:last-child {
+            border-bottom: none;
+        }
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .nav-link {
+            color: #667eea;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            border: 2px solid #667eea;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        .nav-link:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 장르 추천</h1>
+            <p>{{ total_users }}명의 사용자 데이터를 바탕으로 한 추천</p>
+        </div>
+
+        {% if recommendations %}
+        <div class="recommendations-section">
+            <h2>감정별 추천 장르</h2>
+            {% for rec in recommendations %}
+            <div class="recommendation-card">
+                <h3>{{ rec.emotion }} 감정일 때</h3>
+                <p><strong>{{ rec.genre }}</strong> 장르를 추천합니다!</p>
+                <small>{{ rec.count }}명이 선택 ({{ "%.1f"|format(rec.percentage) }}%)</small>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if insights %}
+        <div class="insights-section">
+            <h3>📈 데이터 인사이트</h3>
+            {% for insight in insights %}
+            <div class="insight-item">{{ insight }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-home"></i> 홈으로</a>
+            <a href="/graph" class="nav-link"><i class="fas fa-chart-bar"></i> 통계</a>
+            <a href="/admin" class="nav-link"><i class="fas fa-cog"></i> 관리</a>
+        </div>
+    </div>
+</body>
+</html>
