@@ -18,7 +18,7 @@ import tempfile
 import sqlite3
 from pathlib import Path
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # 보안 설정 강화
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32))
@@ -355,6 +355,31 @@ def recommend():
                              recommendations=[],
                              insights=["데이터를 불러올 수 없습니다."],
                              total_users=0)
+
+@app.route('/admin')
+def admin():
+    """관리자 페이지"""
+    try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        df = pd.read_sql_query("SELECT * FROM analysis_results ORDER BY created_at DESC LIMIT 10", conn)
+        conn.close()
+        
+        stats = {
+            'total_users': len(df),
+            'avg_age': df['age'].mean() if not df.empty and 'age' in df.columns else 0,
+            'age_range': f"{df['age'].min()}-{df['age'].max()}" if not df.empty and 'age' in df.columns else "N/A",
+            'most_emotion': df['emotion'].mode().iloc[0] if not df.empty and 'emotion' in df.columns and not df['emotion'].mode().empty else "N/A"
+        }
+        
+        recent_data = df.to_dict('records') if not df.empty else []
+        
+        return render_template('admin.html', stats=stats, recent_data=recent_data)
+        
+    except Exception as e:
+        logger.error(f"관리자 페이지 오류: {e}")
+        return render_template('admin.html', 
+                             stats={'total_users': 0, 'avg_age': 0, 'age_range': 'N/A', 'most_emotion': 'N/A'},
+                             recent_data=[])
 
 @app.route('/health')
 def health_check():
