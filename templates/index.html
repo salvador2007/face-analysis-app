@@ -1,4 +1,4 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -31,25 +31,6 @@
             max-width: 500px;
             width: 100%;
             text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .container::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: conic-gradient(from 0deg, transparent, rgba(102, 126, 234, 0.1), transparent);
-            animation: rotate 20s linear infinite;
-            z-index: -1;
-        }
-
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
 
         .header {
@@ -190,32 +171,16 @@
             transition: all 0.3s ease;
             width: 100%;
             margin-bottom: 20px;
-            position: relative;
-            overflow: hidden;
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
         }
 
-        .submit-btn:active {
-            transform: translateY(0);
-        }
-
-        .submit-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        .submit-btn:hover::before {
-            left: 100%;
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .nav-links {
@@ -269,25 +234,6 @@
             border: 1px solid #c8e6c9;
         }
 
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            .header h1 {
-                font-size: 1.8em;
-            }
-            
-            .genre-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .nav-links {
-                flex-direction: column;
-            }
-        }
-
         .loading {
             display: none;
             text-align: center;
@@ -307,6 +253,25 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .genre-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .nav-links {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -338,7 +303,7 @@
                         <i class="fas fa-camera"></i>
                         <span>사진을 선택하세요</span>
                     </label>
-                    <div class="preview-container">
+                    <div class="preview-container" id="previewContainer">
                         <img id="preview" class="preview-image" alt="미리보기">
                     </div>
                 </div>
@@ -382,7 +347,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="submit-btn">
+            <button type="submit" class="submit-btn" id="submitBtn">
                 <i class="fas fa-magic"></i> 분석 시작하기
             </button>
 
@@ -396,4 +361,47 @@
             <a href="/graph" class="nav-link">
                 <i class="fas fa-chart-bar"></i> 통계 보기
             </a>
-            <a href
+            <a href="/recommend" class="nav-link">
+                <i class="fas fa-thumbs-up"></i> 추천 보기
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // 파일 선택 및 미리보기
+        document.getElementById('photo').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const previewContainer = document.getElementById('previewContainer');
+            const preview = document.getElementById('preview');
+            const label = document.querySelector('.file-input-label span');
+            
+            if (file) {
+                // 파일 크기 체크 (5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('파일 크기가 5MB를 초과합니다.');
+                    e.target.value = '';
+                    return;
+                }
+                
+                // 파일 타입 체크
+                if (!file.type.match('image.*')) {
+                    alert('이미지 파일만 선택 가능합니다.');
+                    e.target.value = '';
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                    label.textContent = '다른 사진 선택';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewContainer.style.display = 'none';
+                label.textContent = '사진을 선택하세요';
+            }
+        });
+
+        // 폼 제출 처리
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
