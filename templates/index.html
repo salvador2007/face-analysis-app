@@ -75,6 +75,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             background: rgba(102, 126, 234, 0.05);
+            position: relative;
         }
 
         .file-input-label:hover {
@@ -83,16 +84,61 @@
             transform: translateY(-2px);
         }
 
+        .file-input-label.has-file {
+            border-color: #28a745;
+            background: rgba(40, 167, 69, 0.1);
+        }
+
         .file-input-label i {
             font-size: 2em;
             color: #667eea;
             margin-bottom: 10px;
             display: block;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label.has-file i {
+            color: #28a745;
         }
 
         .file-input-label span {
             color: #333;
             font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label.has-file span {
+            color: #28a745;
+        }
+
+        .upload-success {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #28a745;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            animation: checkmark 0.5s ease-in-out;
+        }
+
+        @keyframes checkmark {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
         }
 
         .preview-container {
@@ -299,9 +345,12 @@
             <div class="upload-section">
                 <div class="file-input-wrapper">
                     <input type="file" name="photo" id="photo" class="file-input" accept="image/*" required>
-                    <label for="photo" class="file-input-label">
-                        <i class="fas fa-camera"></i>
-                        <span>사진을 선택하세요</span>
+                    <label for="photo" class="file-input-label" id="fileLabel">
+                        <i class="fas fa-camera" id="uploadIcon"></i>
+                        <span id="uploadText">사진을 선택하세요</span>
+                        <div class="upload-success" id="uploadSuccess">
+                            <i class="fas fa-check"></i>
+                        </div>
                     </label>
                     <div class="preview-container" id="previewContainer">
                         <img id="preview" class="preview-image" alt="미리보기">
@@ -334,74 +383,4 @@
                     </div>
                     <div class="genre-item">
                         <input type="checkbox" name="genre" value="스릴러" id="thriller" class="genre-checkbox">
-                        <label for="thriller" class="genre-label">😰 스릴러</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="SF" id="sf" class="genre-checkbox">
-                        <label for="sf" class="genre-label">🚀 SF</label>
-                    </div>
-                    <div class="genre-item">
-                        <input type="checkbox" name="genre" value="판타지" id="fantasy" class="genre-checkbox">
-                        <label for="fantasy" class="genre-label">🧙 판타지</label>
-                    </div>
-                </div>
-            </div>
-
-            <button type="submit" class="submit-btn" id="submitBtn">
-                <i class="fas fa-magic"></i> 분석 시작하기
-            </button>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>분석 중입니다... 잠시만 기다려주세요</p>
-            </div>
-        </form>
-
-        <div class="nav-links">
-            <a href="/graph" class="nav-link">
-                <i class="fas fa-chart-bar"></i> 통계 보기
-            </a>
-            <a href="/recommend" class="nav-link">
-                <i class="fas fa-thumbs-up"></i> 추천 보기
-            </a>
-        </div>
-    </div>
-
-    <script>
-        // 파일 선택 및 미리보기
-        document.getElementById('photo').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const previewContainer = document.getElementById('previewContainer');
-            const preview = document.getElementById('preview');
-            const label = document.querySelector('.file-input-label span');
-            
-            if (file) {
-                // 파일 크기 체크 (5MB)
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('파일 크기가 5MB를 초과합니다.');
-                    e.target.value = '';
-                    return;
-                }
-                
-                // 파일 타입 체크
-                if (!file.type.match('image.*')) {
-                    alert('이미지 파일만 선택 가능합니다.');
-                    e.target.value = '';
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    previewContainer.style.display = 'block';
-                    label.textContent = '다른 사진 선택';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                previewContainer.style.display = 'none';
-                label.textContent = '사진을 선택하세요';
-            }
-        });
-
-        // 폼 제출 처리
-        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+                        <label for="thriller" class="genre-label">😰
