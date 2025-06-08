@@ -155,6 +155,10 @@ def admin():
     except Exception as e:
         return f"<h3>분석 실패: {str(e)}</h3><a href='/'>돌아가기</a>"
 
+import os
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    port = int(os.environ.get("PORT", 5000))  # Render에서 사용하는 환경변수
+    app.run(debug=True, host='0.0.0.0', port=port)
+
 
