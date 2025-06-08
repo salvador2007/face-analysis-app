@@ -1,21 +1,18 @@
 # 웹 프레임워크
 flask==2.3.3
+gunicorn==21.2.0
 
 # 이미지 처리 및 AI
 deepface==0.0.79
 opencv-python-headless==4.8.0.76
 tensorflow==2.13.0
-tf-keras==2.13.0
 
 # 데이터 처리 및 시각화
 pandas==2.0.3
 matplotlib==3.7.2
 numpy==1.24.3
-scikit-learn==1.3.0
-
-# 파일 감시 (개발용)
-watchdog==3.0.0
 
 # 추가 의존성
 pillow==10.0.0
 protobuf==3.20.3
+werkzeug==2.3.7
