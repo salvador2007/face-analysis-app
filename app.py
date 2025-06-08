@@ -25,7 +25,7 @@ app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32))
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 app.config['DATABASE'] = 'analysis_data.db'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
-app.config['WTF_CSRF_ENABLED'] = False  # Render에서 CSRF 문제 방지
+app.config['WTF_CSRF_ENABLED'] = False
 
 # 보안 헤더 설정
 @app.after_request
@@ -45,7 +45,16 @@ logger = logging.getLogger(__name__)
 # 허용된 파일 확장자
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
-# 데이터베이스 초기화
+# DeepFace 사용 가능 여부 확인
+DEEPFACE_AVAILABLE = False
+try:
+    from deepface import DeepFace
+    DEEPFACE_AVAILABLE = True
+    logger.info("DeepFace 라이브러리 로드 성공")
+except ImportError as e:
+    logger.warning(f"DeepFace 라이브러리 로드 실패: {e}")
+    logger.info("샘플 데이터 모드로 실행됩니다")
+
 def init_db():
     """SQLite 데이터베이스 초기화"""
     try:
@@ -72,7 +81,7 @@ def init_db():
         logger.error(f"데이터베이스 초기화 실패: {e}")
 
 def validate_image_file(file_path):
-    """이미지 파일 검증 (간단한 버전)"""
+    """이미지 파일 검증"""
     try:
         img = cv2.imread(file_path)
         if img is None:
@@ -98,6 +107,65 @@ def allowed_file(filename):
     if not filename:
         return False
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def analyze_face_safe(filepath):
+    """안전한 얼굴 분석 함수"""
+    try:
+        if DEEPFACE_AVAILABLE:
+            logger.info("DeepFace로 실제 분석 시도")
+            result = DeepFace.analyze(
+                img_path=filepath, 
+                actions=['age', 'gender', 'emotion'], 
+                enforce_detection=False,
+                silent=True
+            )
+            
+            if isinstance(result, list):
+                result = result[0]
+            
+            age = int(result.get('age', 25))
+            gender_data = result.get('gender', {'Woman': 60, 'Man': 40})
+            emotion = result.get('dominant_emotion', 'neutral')
+            emotion_scores = result.get('emotion', {'neutral': 100})
+            
+            logger.info("DeepFace 분석 성공")
+            return age, gender_data, emotion, emotion_scores, False
+            
+    except Exception as e:
+        logger.error(f"DeepFace 분석 실패: {e}")
+    
+    # 기본값 사용 (DeepFace 실패 시)
+    logger.info("샘플 데이터 사용")
+    sample_ages = [22, 25, 28, 30, 32, 35, 27, 29]
+    sample_emotions = ['happy', 'neutral', 'sad', 'surprise']
+    
+    age = np.random.choice(sample_ages)
+    emotion = np.random.choice(sample_emotions)
+    
+    # 성별은 랜덤하게
+    if np.random.random() > 0.5:
+        gender_data = {'Woman': np.random.uniform(70, 95), 'Man': np.random.uniform(5, 30)}
+    else:
+        gender_data = {'Man': np.random.uniform(70, 95), 'Woman': np.random.uniform(5, 30)}
+    
+    # 감정 점수 생성
+    emotion_scores = {
+        'neutral': np.random.uniform(20, 40),
+        'happy': np.random.uniform(15, 35),
+        'sad': np.random.uniform(10, 25),
+        'angry': np.random.uniform(5, 20),
+        'surprise': np.random.uniform(5, 15),
+        'disgust': np.random.uniform(2, 10),
+        'fear': np.random.uniform(2, 8)
+    }
+    # 선택된 감정의 점수를 높게 설정
+    emotion_scores[emotion] = np.random.uniform(40, 60)
+    
+    # 총합을 100으로 맞추기
+    total = sum(emotion_scores.values())
+    emotion_scores = {k: (v/total)*100 for k, v in emotion_scores.items()}
+    
+    return age, gender_data, emotion, emotion_scores, True
 
 def save_analysis_result(data):
     """분석 결과를 데이터베이스에 저장"""
@@ -134,6 +202,8 @@ def upload():
     client_info = get_client_info(request)
     
     try:
+        logger.info(f"업로드 시작 - IP: {client_info['ip']}")
+        
         if 'photo' not in request.files:
             logger.warning(f"파일 없음 - IP: {client_info['ip']}")
             flash('사진을 선택해주세요', 'error')
@@ -159,15 +229,18 @@ def upload():
             return redirect(url_for('index'))
 
         # 안전한 파일명 생성
-        original_filename = secure_filename(file.filename)
-        file_hash = hashlib.sha256(file.read()).hexdigest()[:16]
+        file_content = file.read()
+        file_hash = hashlib.sha256(file_content).hexdigest()[:16]
         file.seek(0)
         
         unique_filename = f"{file_hash}_{uuid.uuid4().hex[:8]}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         
         # 파일 저장
-        file.save(filepath)
+        with open(filepath, 'wb') as f:
+            f.write(file_content)
+        
+        logger.info(f"파일 저장 완료: {filepath}")
         
         # 파일 검증
         is_valid, validation_msg = validate_image_file(filepath)
@@ -178,44 +251,10 @@ def upload():
             flash(f'파일 검증 실패: {validation_msg}', 'error')
             return redirect(url_for('index'))
 
-        logger.info(f"파일 업로드 성공 - IP: {client_info['ip']}")
+        logger.info(f"파일 검증 성공 - IP: {client_info['ip']}")
 
-        # DeepFace 분석 대신 임시 값 사용 (Render에서 DeepFace 문제 시)
-        try:
-            # DeepFace를 사용할 수 없는 경우를 대비한 fallback
-            from deepface import DeepFace
-            
-            result = DeepFace.analyze(
-                img_path=filepath, 
-                actions=['age', 'gender', 'emotion'], 
-                enforce_detection=False,
-                silent=True
-            )
-            
-            if isinstance(result, list):
-                result = result[0]
-            
-            age = int(result.get('age', 25))
-            gender_data = result.get('gender', {'Woman': 60, 'Man': 40})
-            emotion = result.get('dominant_emotion', 'neutral')
-            emotion_scores = result.get('emotion', {'neutral': 100})
-            
-        except Exception as deepface_error:
-            logger.error(f"DeepFace 분석 실패, 기본값 사용: {deepface_error}")
-            # 기본값 사용
-            age = 25
-            gender_data = {'Woman': 60, 'Man': 40}
-            emotion = 'neutral'
-            emotion_scores = {
-                'neutral': 40,
-                'happy': 25,
-                'sad': 15,
-                'angry': 10,
-                'surprise': 5,
-                'disgust': 3,
-                'fear': 2
-            }
-            flash('AI 분석이 일시적으로 불가능하여 샘플 데이터를 표시합니다', 'warning')
+        # 얼굴 분석
+        age, gender_data, emotion, emotion_scores, is_sample = analyze_face_safe(filepath)
         
         # 데이터 처리
         confidence = max(emotion_scores.values()) if emotion_scores else 0
@@ -239,14 +278,23 @@ def upload():
             'ip_address': client_info['ip'][:45]
         }
         
-        save_analysis_result(analysis_data)
+        save_success = save_analysis_result(analysis_data)
+        if not save_success:
+            logger.warning("데이터베이스 저장 실패")
 
         # 임시 파일 정리
         try:
             if os.path.exists(filepath):
                 os.remove(filepath)
-        except:
-            pass
+                logger.info("임시 파일 삭제 완료")
+        except Exception as e:
+            logger.warning(f"임시 파일 삭제 실패: {e}")
+
+        # 샘플 데이터 사용 시 경고
+        if is_sample:
+            flash('AI 분석이 일시적으로 불가능하여 샘플 데이터를 표시합니다', 'info')
+
+        logger.info(f"분석 완료 - Age: {age}, Gender: {gender_label}, Emotion: {emotion}")
 
         return render_template('result.html', 
                              age=age,
@@ -255,7 +303,8 @@ def upload():
                              emotion=emotion,
                              confidence=confidence,
                              emotion_scores=emotion_scores,
-                             selected_genres=safe_genres)
+                             selected_genres=safe_genres,
+                             is_sample=is_sample)
         
     except Exception as e:
         logger.error(f"업로드 처리 오류: {str(e)}")
@@ -283,14 +332,14 @@ def graph():
             'date_range': f"{len(df)}건"
         }
         
-        # 간단한 그래프 생성
+        # 그래프 생성
         plt.figure(figsize=(10, 6))
         if 'emotion' in df.columns:
             emotion_counts = df['emotion'].value_counts()
-            plt.bar(emotion_counts.index, emotion_counts.values)
-            plt.title('감정 분포')
-            plt.xlabel('감정')
-            plt.ylabel('빈도')
+            plt.bar(emotion_counts.index, emotion_counts.values, color='skyblue')
+            plt.title('감정 분포', fontsize=16)
+            plt.xlabel('감정', fontsize=12)
+            plt.ylabel('빈도', fontsize=12)
             plt.xticks(rotation=45)
         else:
             plt.text(0.5, 0.5, '데이터 없음', ha='center', va='center', transform=plt.gca().transAxes)
@@ -299,7 +348,7 @@ def graph():
         
         # 이미지를 base64로 변환
         buffer = BytesIO()
-        plt.savefig(buffer, format='png')
+        plt.savefig(buffer, format='png', dpi=100)
         buffer.seek(0)
         graph_data = base64.b64encode(buffer.getvalue()).decode()
         plt.close()
@@ -325,23 +374,32 @@ def recommend():
         total_users = len(df) if not df.empty else 0
         
         if not df.empty and 'emotion' in df.columns and 'genres' in df.columns:
-            # 감정별 추천 생성 (샘플)
-            emotions = ['happy', 'sad', 'angry', 'neutral']
-            genres = ['코미디', '드라마', '액션', '로맨스']
+            # 감정별 추천 생성
+            emotion_genre_map = {
+                'happy': '코미디',
+                'sad': '드라마', 
+                'angry': '액션',
+                'neutral': '로맨스',
+                'surprise': '스릴러',
+                'fear': '공포',
+                'disgust': 'SF'
+            }
             
-            for i, emotion in enumerate(emotions):
-                if i < len(genres):
-                    recommendations.append({
-                        'emotion': emotion,
-                        'genre': genres[i],
-                        'count': total_users // 4,
-                        'percentage': 25.0
-                    })
+            emotion_counts = df['emotion'].value_counts()
+            for emotion, count in emotion_counts.items():
+                genre = emotion_genre_map.get(emotion, '드라마')
+                percentage = (count / total_users) * 100
+                recommendations.append({
+                    'emotion': emotion,
+                    'genre': genre,
+                    'count': count,
+                    'percentage': percentage
+                })
             
             insights = [
                 f"총 {total_users}명의 사용자가 분석을 받았습니다.",
-                "가장 인기 있는 장르는 드라마입니다.",
-                "행복한 감정일 때 코미디를 선호하는 경향이 있습니다."
+                f"가장 많은 감정은 '{emotion_counts.index[0]}'입니다.",
+                "감정에 따른 맞춤 장르를 추천드립니다."
             ]
         
         return render_template('recommend.html', 
@@ -387,7 +445,8 @@ def health_check():
     return jsonify({
         'status': 'healthy', 
         'timestamp': datetime.now().isoformat(),
-        'version': '2.1'
+        'version': '2.2',
+        'deepface_available': DEEPFACE_AVAILABLE
     })
 
 @app.errorhandler(413)
