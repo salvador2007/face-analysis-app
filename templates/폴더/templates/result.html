@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>분석 결과 🎯</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 분석 결과</h1>
+            <p>당신의 얼굴에서 감지된 정보를 바탕으로<br>맞춤 추천을 제공합니다.</p>
+        </div>
+
+        <div class="result-box">
+            <h2>👤 기본 정보</h2>
+            <ul class="result-list">
+                <li><strong>나이:</strong> {{ age }}세</li>
+                <li><strong>성별:</strong> {{ gender }} (신뢰도 {{ gender_confidence|round(1) }}%)</li>
+                <li><strong>감정:</strong> {{ emotion }} (신뢰도 {{ confidence|round(1) }}%)</li>
+            </ul>
+        </div>
+
+        <div class="result-box">
+            <h2>🎵 선택한 장르</h2>
+            {% if selected_genres %}
+                <ul class="genre-list">
+                    {% for genre in selected_genres %}
+                        <li>{{ genre }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>선택한 장르가 없습니다.</p>
+            {% endif %}
+        </div>
+
+        <div class="result-box">
+            <h2>📊 감정 점수 분포</h2>
+            <ul class="emotion-list">
+                {% for emo, score in emotion_scores.items() %}
+                    <li>{{ emo }}: {{ score|round(1) }}%</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-home"></i> 홈으로</a>
+            <a href="/graph" class="nav-link"><i class="fas fa-chart-bar"></i> 통계</a>
+            <a href="/recommend" class="nav-link"><i class="fas fa-thumbs-up"></i> 장르 추천</a>
+        </div>
+    </div>
+</body>
+</html>
+
