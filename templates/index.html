@@ -317,4 +317,256 @@
 
         .loading-content {
             background: white;
-            padding
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .genre-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎭 AI 얼굴 분석</h1>
+            <p>사진을 업로드하여 나이, 성별, 감정을 분석하고<br>맞춤 장르를 추천받으세요!</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-section">
+                <div class="file-input-wrapper">
+                    <input type="file" id="photo" name="photo" class="file-input" accept="image/*" required>
+                    <label for="photo" class="file-input-label" id="fileLabel">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span id="labelText">사진 선택하기</span>
+                    </label>
+                    <div class="upload-success" id="uploadSuccess">
+                        <i class="fas fa-check"></i>
+                    </div>
+                </div>
+                
+                <div class="preview-container" id="previewContainer">
+                    <img id="previewImage" class="preview-image" alt="미리보기">
+                </div>
+                
+                <div class="file-info" id="fileInfo"></div>
+            </div>
+
+            <div class="genre-section">
+                <h3>📽️ 좋아하는 장르를 선택하세요</h3>
+                <div class="genre-grid">
+                    <div class="genre-item">
+                        <input type="checkbox" id="comedy" name="genre" value="코미디" class="genre-checkbox">
+                        <label for="comedy" class="genre-label">🤣 코미디</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="horror" name="genre" value="공포" class="genre-checkbox">
+                        <label for="horror" class="genre-label">👻 공포</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="drama" name="genre" value="드라마" class="genre-checkbox">
+                        <label for="drama" class="genre-label">🎭 드라마</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="action" name="genre" value="액션" class="genre-checkbox">
+                        <label for="action" class="genre-label">🔥 액션</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="romance" name="genre" value="로맨스" class="genre-checkbox">
+                        <label for="romance" class="genre-label">💕 로맨스</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="thriller" name="genre" value="스릴러" class="genre-checkbox">
+                        <label for="thriller" class="genre-label">😱 스릴러</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="sf" name="genre" value="SF" class="genre-checkbox">
+                        <label for="sf" class="genre-label">🚀 SF</label>
+                    </div>
+                    <div class="genre-item">
+                        <input type="checkbox" id="fantasy" name="genre" value="판타지" class="genre-checkbox">
+                        <label for="fantasy" class="genre-label">🧙 판타지</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                <i class="fas fa-magic"></i> AI 분석 시작하기
+            </button>
+        </form>
+
+        <div class="nav-links">
+            <a href="/graph" class="nav-link">
+                <i class="fas fa-chart-bar"></i> 통계
+            </a>
+            <a href="/recommend" class="nav-link">
+                <i class="fas fa-thumbs-up"></i> 추천
+            </a>
+            <a href="/admin" class="nav-link">
+                <i class="fas fa-cog"></i> 관리
+            </a>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <i class="fas fa-brain fa-3x" style="color: #667eea; margin-bottom: 20px;"></i>
+            <h3>AI가 분석 중입니다...</h3>
+            <p>잠시만 기다려주세요</p>
+        </div>
+    </div>
+
+    <script>
+        // 파일 선택 처리
+        document.getElementById('photo').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const label = document.getElementById('fileLabel');
+            const labelText = document.getElementById('labelText');
+            const uploadSuccess = document.getElementById('uploadSuccess');
+            const previewContainer = document.getElementById('previewContainer');
+            const previewImage = document.getElementById('previewImage');
+            const fileInfo = document.getElementById('fileInfo');
+
+            if (file) {
+                // 파일 크기 검증 (5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('파일 크기는 5MB 이하여야 합니다.');
+                    e.target.value = '';
+                    return;
+                }
+
+                // 파일 타입 검증
+                const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+                if (!allowedTypes.includes(file.type)) {
+                    alert('PNG, JPG, JPEG 파일만 업로드 가능합니다.');
+                    e.target.value = '';
+                    return;
+                }
+
+                // UI 업데이트
+                label.classList.add('has-file');
+                labelText.textContent = '파일 선택 완료!';
+                uploadSuccess.style.display = 'flex';
+
+                // 미리보기 이미지 표시
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+
+                // 파일 정보 표시
+                const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                fileInfo.innerHTML = `
+                    <strong>파일명:</strong> ${file.name}<br>
+                    <strong>크기:</strong> ${fileSize}MB<br>
+                    <strong>형식:</strong> ${file.type}
+                `;
+                fileInfo.style.display = 'block';
+            } else {
+                // 초기화
+                label.classList.remove('has-file');
+                labelText.textContent = '사진 선택하기';
+                uploadSuccess.style.display = 'none';
+                previewContainer.style.display = 'none';
+                fileInfo.style.display = 'none';
+            }
+        });
+
+        // 폼 제출 처리
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            const fileInput = document.getElementById('photo');
+            const submitBtn = document.getElementById('submitBtn');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+
+            if (!fileInput.files[0]) {
+                e.preventDefault();
+                alert('사진을 선택해주세요!');
+                return;
+            }
+
+            // 로딩 상태 표시
+            submitBtn.disabled = true;
+            submitBtn.classList.add('loading');
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 분석 중...';
+            loadingOverlay.style.display = 'flex';
+        });
+
+        // 드래그 앤 드롭 기능
+        const fileLabel = document.getElementById('fileLabel');
+        const fileInput = document.getElementById('photo');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileLabel.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            fileLabel.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            fileLabel.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            fileLabel.style.borderColor = '#764ba2';
+            fileLabel.style.background = 'rgba(118, 75, 162, 0.1)';
+        }
+
+        function unhighlight(e) {
+            fileLabel.style.borderColor = '#667eea';
+            fileLabel.style.background = 'rgba(102, 126, 234, 0.05)';
+        }
+
+        fileLabel.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        }
+    </script>
+</body>
+</html>

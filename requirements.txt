@@ -3,22 +3,27 @@ flask==2.3.3
 gunicorn==21.2.0
 flask-wtf==1.1.1
 
-# 이미지 처리 및 AI (Render 최적화)
+# 이미지 처리 및 AI
+# CUDA 12.9.1, cuDNN 8.9.7 환경에 맞게 tensorflow 최신 버전 사용
+# (tensorflow 패키지가 CPU/GPU 자동 지원)
 deepface==0.0.79
 opencv-python-headless==4.8.0.76
-tensorflow-cpu==2.13.0  # CPU 버전으로 변경 (Render 최적화)
+tensorflow==2.16.1
 
 # 데이터 처리 및 시각화
 pandas==2.0.3
 matplotlib==3.7.2
+seaborn==0.12.2
 numpy==1.24.3
 
 # 보안 및 파일 처리
 python-magic==0.4.27
-python-magic-bin==0.4.14  # Windows 호환성
+python-magic-bin==0.4.14
 
 # 추가 의존성
 pillow==10.0.0
 protobuf==3.20.3
 werkzeug==2.3.7
-sqlite3  # 기본 포함
+
+# 로깅 및 유틸리티
+python-dotenv==1.0.0

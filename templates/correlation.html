@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>📈 상관관계 분석</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f2f5ff;
+            padding: 40px;
+        }
+        .container {
+            max-width: 960px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        img {
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 얼굴형, 감정, 장르 상관관계</h1>
+        <p>사용자 데이터에서 변수 간 상관관계를 시각적으로 확인해보세요.</p>
+        {% if correlation_plot %}
+            <img src="data:image/png;base64,{{ correlation_plot }}" alt="상관관계 히트맵">
+        {% else %}
+            <p>데이터가 부족하거나 오류가 발생했습니다.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
